@@ -32,7 +32,7 @@
 #define LPM_STM32_HSE_PIN_OUT    D0
 
 #define REPORT_BUFFER_QUEUE_SIZE    68
-#define BATTERY_ADC_PIN              B1
+#define BATTERY_ADC_PIN              A7
 #define BATTERY_ADC_DRIVER           ADCD1
 // usb 检测
 #define USB_POWER_SENSE_PIN         A10

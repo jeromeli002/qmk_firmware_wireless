@@ -5,7 +5,7 @@ KB_LPM_DRIVER = lpm_at32f415
 # 是否使能QMK端读取电池电压
 KB_CHECK_BATTERY_ENABLED = yes
 # 开启键盘层DEBUG  这里是用RTT输出日记的
-KB_DEBUG = no
+KB_DEBUG = uart_bhq
 
 
 include keyboards/keymagichorse/kb_common/kb_common.mk
