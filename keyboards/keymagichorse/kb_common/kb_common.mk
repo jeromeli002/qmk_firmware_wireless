@@ -23,9 +23,6 @@ endif
 # 矩阵扫描相关
 MATRIX_TYPE ?= default
 ifneq ($(filter $(MATRIX_TYPE), default shift595),)
-    VPATH += ${KB_COMMON_DIR}/matrix/matrix_type
-    VPATH += ${KB_COMMON_DIR}/matrix/matrix_sleep
-    SRC+= kb_common/matrix/matrix_sleep/matrix_sleep_${MATRIX_TYPE}.c
     ifeq ($(strip $(MATRIX_TYPE)), shift595)
         OPT_DEFS += -DSHIFT595_ENABLED
         CUSTOM_MATRIX = lite	
@@ -58,12 +55,32 @@ endif
 
 # 蓝牙
 ifeq ($(strip $(BLUETOOTH_DRIVER)), bhq)
-    # 低功耗
+
+    # 低功耗 start
     ifeq ($(strip $(KB_LPM_ENABLED)), yes)
         OPT_DEFS += -DKB_LPM_ENABLED
         OPT_DEFS += -DKB_LPM_DRIVER
+        
+        # 矩阵唤醒方式
+        VPATH += ${KB_COMMON_DIR}/matrix/matrix_type
+        VPATH += ${KB_COMMON_DIR}/matrix/matrix_sleep
+        ifeq ($(strip $(MATRIX_TYPE)), default)
+            ifeq ($(strip $(KB_LPM_DRIVER)), lpm_at32f415)
+                SRC+= kb_common/matrix/matrix_sleep/matrix_sleep_${MATRIX_TYPE}_at32.c
+            endif
+
+            ifeq ($(strip $(KB_LPM_DRIVER)), lpm_stm32f4)
+                SRC+= kb_common/matrix/matrix_sleep/matrix_sleep_${MATRIX_TYPE}_stm32.c
+            endif
+        else
+            SRC+= kb_common/matrix/matrix_sleep/matrix_sleep_${MATRIX_TYPE}.c
+        endif
+        # 矩阵唤醒方式选择
+
         SRC += kb_common/${KB_LPM_DRIVER}.c
     endif
+    # 低功耗 end
+
     # 电池
     ifeq ($(strip $(KB_CHECK_BATTERY_ENABLED)), yes)
         OPT_DEFS += -DKB_CHECK_BATTERY_ENABLED
