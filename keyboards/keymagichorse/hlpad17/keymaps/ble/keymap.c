@@ -24,6 +24,9 @@
 #include "wireless.h"
 #include "transport.h"
 #include "report_buffer.h"
+#include "timer.h"
+
+led_t kb_led_state = {0};
 
 
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
@@ -88,11 +91,7 @@ void rgb_adv_unblink_all_layer(void) {
 
 
 bool led_update_user(led_t led_state) {
-    // 如果当前是USB连接，或者是蓝牙/2.4G连接且已配对连接状态
-    if( (transport_get() > KB_TRANSPORT_USB && wireless_get() == WT_STATE_CONNECTED) || ( usb_power_connected() == true && transport_get() == KB_TRANSPORT_USB))
-    {
-        rgblight_set_layer_state(3, led_state.num_lock);
-    }
+    kb_led_state = led_state;
     return true;
 }
 
@@ -166,12 +165,28 @@ void ws2812_set_power(uint8_t on)
 // After initializing the peripheral
 void keyboard_post_init_kb(void)
 {
+    ws2812_init();
     ws2812_set_power(1);
 
     rgblight_disable();
     rgblight_layers = _rgb_layers;  // 层灯光赋值
     rgb_adv_unblink_all_layer();
 }
+
+void housekeeping_task_user(void) 
+{
+    static uint32_t kb_led_cut = 0;
+
+    // 如果当前是USB连接，或者是蓝牙/2.4G连接且已配对连接状态
+    if( (transport_get() > KB_TRANSPORT_USB && wireless_get() == WT_STATE_CONNECTED) || ( usb_power_connected() == true && transport_get() == KB_TRANSPORT_USB))
+    {
+        if (timer_elapsed32(kb_led_cut) > 500) {
+            kb_led_cut = timer_read32();
+            rgblight_set_layer_state(3, kb_led_state.num_lock);
+        }
+    }
+}
+
 
 #   if defined(KB_LPM_ENABLED)
 // 低功耗外围设备电源控制
