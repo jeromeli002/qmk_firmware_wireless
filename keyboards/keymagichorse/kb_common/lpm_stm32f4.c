@@ -129,7 +129,7 @@ void enter_low_power_mode_prepare(void)
 
     gpio_set_pin_input_low(BHQ_IQR_PIN);
     palEnableLineEvent(BHQ_IQR_PIN, PAL_EVENT_MODE_RISING_EDGE);
-    gpio_write_pin_low(BHQ_INT_PIN);
+    gpio_set_pin_input(BHQ_INT_PIN);
 
 // usb 插入检测
     gpio_set_pin_input(USB_POWER_SENSE_PIN);
