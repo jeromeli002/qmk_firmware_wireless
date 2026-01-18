@@ -27,7 +27,7 @@
 #include "timer.h"
 
 led_t kb_led_state = {0};
-
+uint8_t bat_low_flag = 0;
 
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 	[0] = LAYOUT(
@@ -132,11 +132,14 @@ void wireless_rf24g_hanlde_kb(uint8_t connectSta,uint8_t pairingSta)
 // 电量回调函数 红灯 慢闪
 void battery_percent_changed_kb(uint8_t level)
 {
-    rgb_adv_unblink_all_layer();
     if(level <= 10)
     {
         rgb_adv_unblink_all_layer();
-        rgblight_blink_layer_repeat(4 , 200, 255);
+        bat_low_flag = 1;
+    }
+    else
+    {
+        bat_low_flag = 0;
     }
 }
 
@@ -176,12 +179,32 @@ void keyboard_post_init_kb(void)
 void housekeeping_task_user(void) 
 {
     static uint32_t kb_led_cut = 0;
+    static uint32_t low_led_blink_timer = 0;
+    static uint8_t low_led_sta = 0;
+
+    
+    if (bat_low_flag == 1)
+    {
+        if (timer_elapsed32(low_led_blink_timer) > 500)
+        {
+            low_led_blink_timer = timer_read32();
+            low_led_sta ^= 1;
+            rgblight_set_layer_state(4, low_led_sta);
+        }
+        return;
+    }
+    else
+    {
+        low_led_blink_timer = 0;
+        low_led_sta = 0;
+    }
 
     // 如果当前是USB连接，或者是蓝牙/2.4G连接且已配对连接状态
     if( (transport_get() > KB_TRANSPORT_USB && wireless_get() == WT_STATE_CONNECTED) || ( usb_power_connected() == true && transport_get() == KB_TRANSPORT_USB))
     {
         if (timer_elapsed32(kb_led_cut) > 500) {
             kb_led_cut = timer_read32();
+            rgb_adv_unblink_all_layer();
             rgblight_set_layer_state(3, kb_led_state.num_lock);
         }
     }
