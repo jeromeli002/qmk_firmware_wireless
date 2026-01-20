@@ -29,9 +29,6 @@ __attribute__((weak)) void battery_percent_changed_kb(uint8_t level) {}
 
 static void battery_percent_changed_internal(uint8_t level)
 {
-    if (!battery_has_valid_sample) {
-        return;
-    }
     battery_percent_changed_user(level);
     battery_percent_changed_kb(level);
 }
@@ -86,6 +83,7 @@ static uint8_t battery_read_percent(void)
 
         battery_has_valid_sample = 1;
         battery_percent_debounce_reset();
+        battery_percent_changed_internal(100);
         return 1;
     }
 
@@ -99,11 +97,11 @@ static uint8_t battery_read_percent(void)
     wait_us(50);
 
     for (uint8_t i = 0; i < NUM; i++) {
-        uint16_t v = km_analogReadPin(BATTERY_ADC_PIN) >> 2;
+        uint16_t v = km_analogReadPin(BATTERY_ADC_PIN);
 
         if (v < 5) {
             wait_us(10);
-            v = km_analogReadPin(BATTERY_ADC_PIN) >> 2;
+            v = km_analogReadPin(BATTERY_ADC_PIN) ;
             if (v < 5) {
                 km_analogAdcStop(BATTERY_ADC_PIN);
                 return 0;
@@ -120,14 +118,17 @@ static uint8_t battery_read_percent(void)
     sum -= max_v + min_v;
     uint16_t adc = sum / (NUM - 2);
 
-    /* ADC → 电压 */
-    uint16_t mv_div = (adc * 3300UL) / 1023;
+    uint16_t mv_div = (adc * 3300UL) / 4095;    // 12bit
     battery_mv =
         (uint16_t)((uint32_t)mv_div * (BAT_R_UPPER + BAT_R_LOWER) /
                    BAT_R_LOWER);
 
     /* 电压 → 百分比 */
     uint8_t new_percent = calculate_battery_percentage(battery_mv);
+
+
+    km_printf("adc:%d mv_div:%d bat mv:%d\n", adc, mv_div, battery_mv );
+
 
     /* 5% 一档 */
     new_percent = ((new_percent + 2) / 5) * 5;
@@ -140,10 +141,7 @@ static uint8_t battery_read_percent(void)
 
     /* 消抖判断 */
     if (battery_percent_debounce(new_percent)) {
-        if(battery_percent != new_percent)
-        {
-           battery_percent_changed_internal(new_percent); 
-        }
+        battery_percent_changed_internal(new_percent); 
         battery_percent          = new_percent;
         battery_has_valid_sample = 1;
         km_printf("battery stable: %dmV -> %d%\n",

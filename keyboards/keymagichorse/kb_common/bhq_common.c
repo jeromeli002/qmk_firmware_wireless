@@ -86,9 +86,9 @@ bool process_record_bhq(uint16_t keycode, keyrecord_t *record) {
             keycode != BLE_RESET &&
             keycode != BLE_OFF
         ) {
-            if((IS_BLE_TRANSPORT(transport_get()) == true))
+            if(wireless_get() == WT_STATE_DISCONNECTED || wireless_get() == WT_STATE_RESET || wireless_get() == WT_STATE_INITIALIZED )
             {
-                if(wireless_get() == WT_STATE_DISCONNECTED || wireless_get() == WT_STATE_RESET || wireless_get() == WT_STATE_INITIALIZED )
+                if((IS_BLE_TRANSPORT(transport_get()) == true))
                 {
                     // 检查传输模式是否为蓝牙模式
                     // KB_TRANSPORT_BLUETOOTH_1 在枚举 里面是2、在蓝牙通道内是0
@@ -219,6 +219,7 @@ void bhq_switch_host_task(void){
 # if defined(KB_CHECK_BATTERY_ENABLED)
 void battery_percent_changed_user(uint8_t level)
 {
+    km_printf("bat--%d\n",level);
     if (usb_power_connected()) {
         if (bhq_bat_low_sta != 0) {
             bhq_bat_low_sta = 0;
@@ -231,12 +232,14 @@ void battery_percent_changed_user(uint8_t level)
         if (bhq_bat_low_sta != 2) {
             bhq_bat_low_sta = 2;
             bluetooth_disabled();         // 严重低电量时禁用蓝牙
+            km_printf("bat <= 5\n");
         }
     } 
     else if (battery_percent <= 10) {
         if (bhq_bat_low_sta != 1) {
             bhq_bat_low_sta = 1;
             bluetooth_enabled(); 
+            km_printf("bat <= 10\n");
         }
     } 
     else {
