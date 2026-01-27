@@ -134,53 +134,6 @@ void BHQ_SendCmd(uint8_t isack, uint8_t *dat, uint8_t datLength)
     BHQ_SendData(pkt, index);
 }
 
-void bhq_ConfigRunParam(bhkDevConfigInfo_t parma)
-{
-    uint8_t i = 0;
-    uint8_t index = 0;
-    bhkBuff[index++] = 0x11;    
-    bhkBuff[index++] = parma.vendor_id_source;    
-    bhkBuff[index++] = BHQ_L_UINT16(parma.verndor_id);  
-    bhkBuff[index++] = BHQ_H_UINT16(parma.verndor_id);  
-
-    bhkBuff[index++] = BHQ_L_UINT16(parma.product_id);  
-    bhkBuff[index++] = BHQ_H_UINT16(parma.product_id);  
-
-    bhkBuff[index++] = BHQ_L_UINT16(parma.le_connection_interval_min);  
-    bhkBuff[index++] = BHQ_H_UINT16(parma.le_connection_interval_min);  
-
-    bhkBuff[index++] = BHQ_L_UINT16(parma.le_connection_interval_max);  
-    bhkBuff[index++] = BHQ_H_UINT16(parma.le_connection_interval_max); 
-
-    bhkBuff[index++] = BHQ_L_UINT16(parma.le_connection_interval_timeout);  
-    bhkBuff[index++] = BHQ_H_UINT16(parma.le_connection_interval_timeout); 
-
-    bhkBuff[index++] = parma.tx_poweer; 
-    bhkBuff[index++] = parma.mk_is_read_battery_voltage; 
-    bhkBuff[index++] = parma.mk_adc_pga; 
-
-    bhkBuff[index++] = BHQ_L_UINT16(parma.mk_rvd_r1);  
-    bhkBuff[index++] = BHQ_H_UINT16(parma.mk_rvd_r1); 
-
-    bhkBuff[index++] = BHQ_L_UINT16(parma.mk_rvd_r2);  
-    bhkBuff[index++] = BHQ_H_UINT16(parma.mk_rvd_r2); 
-    
-    bhkBuff[index++] = BHQ_L_UINT16(parma.sleep_1_s);  
-    bhkBuff[index++] = BHQ_H_UINT16(parma.sleep_1_s); 
-
-    bhkBuff[index++] = BHQ_L_UINT16(parma.sleep_2_s);  
-    bhkBuff[index++] = BHQ_H_UINT16(parma.sleep_2_s); 
-
-    bhkBuff[index++] = parma.bleNameStrLength; 
-
-    for(i= 0; i < parma.bleNameStrLength; i++)
-    {
-        bhkBuff[index++] = parma.bleNameStr[i]; 
-    }
-
-    BHQ_SendCmd(BHQ_NOT_ACK, bhkBuff,index);
-}
-
 // common Not data Ack
 void ackCommonNotData(uint8_t cmdid, uint8_t sta)
 {
@@ -203,6 +156,7 @@ void bhq_SetPairingMode(uint8_t host_index,uint16_t timeout_1S)
     bhkBuff[index++] = BHQ_H_UINT16(timeout_1S);      
     BHQ_SendCmd(BHQ_NOT_ACK, bhkBuff,index);
 }
+
 void bhq_OpenBleAdvertising(uint8_t host_index,uint16_t timeout_1S)
 {
     uint8_t index = 0;
@@ -367,7 +321,6 @@ void bhq_send_mouse(uint8_t* report) {
 
 void bhq_send_hid_raw(uint8_t *data, uint8_t length)
 {
-    // bhq_printf("mcu send hid raw length:%d\r\n",length);
     uint8_t index = 0;
     memset(bhkBuff, 0, PACKET_MAX_LEN);
 
@@ -380,17 +333,11 @@ void bhq_send_hid_raw(uint8_t *data, uint8_t length)
 
 void BHQ_Led_Lock(uint8_t led_sta)
 {
-    // bhq_printf("[%s] Num Lock\t", (led_sta & (1<<0)) ? "*" : " ");
-    // bhq_printf("[%s] Caps Lock\t", (led_sta & (1<<1)) ? "*" : " ");
-    // bhq_printf("[%s] Scroll Lock\n", (led_sta & (1<<2)) ? "*" : " ");
-    // bhq_printf("bhq led sta:%d\n",led_sta);
     bluetooth_bhq_set_keyboard_leds(led_sta);
 }
 
-__attribute__((weak)) void BHQ_Protocol_Process_user(uint8_t *dat, uint16_t length) 
-{
-    
-}
+__attribute__((weak)) void BHQ_Protocol_Process_user(uint8_t *dat, uint16_t length) {}
+
 // BHQ_Protocol_Process
 void BHQ_Protocol_Process(uint8_t *dat, uint16_t length)
 {
@@ -536,44 +483,27 @@ void bhq_task(void)
     }
 }
 
-
-// 验证数据是否有效
 uint8_t bhkVerify(uint8_t *dat, uint16_t length)
 {
-    uint8_t dataRead_length = 3 + dat[2];    // 两个帧头  一个长度 = 4 不包括帧头的长度
-//    bhq_printf("dataRead_length:%d \r\n",dataRead_length);
-
+    uint8_t dataRead_length = 3 + dat[2];   
     uint16_t dataReadCrc = BHQ_BUILD_UINT16(dat[dataRead_length],dat[dataRead_length + 1]);
-//    bhq_printf("readCRCL %02x  readCRCH %02x \r\n",dat[dataRead_length],dat[dataRead_length + 1]);
-
     uint16_t dataSumCrc = bhkSumCrc(dat,dataRead_length) ;
-//    bhq_printf("readCRC %04x    sumCRC %04x \r\n", dataReadCrc, dataSumCrc);
-//    bhq_printf("readCRC %d    sumCRC %d \r\n", dataReadCrc, dataSumCrc);
-
-
     if(dat[0] != BHQ_FRAME_HEADER_1 || dat[1] != BHQ_FRAME_HEADER_2)
     {
-    //    bhq_printf("Verify: FRAME_HEADER error !! \r\n");
         return 0x01;
     }
 
     if(dataReadCrc != dataSumCrc)
     {
-    //    bhq_printf("Verify: CRC error !! \r\n");
-
         return 0x02;
     }
 
-    if(dat[dataRead_length + 2] != BHQ_FRAME_END_1)  // 跳过两个校验和就到帧尾了
+    if(dat[dataRead_length + 2] != BHQ_FRAME_END_1) 
     {
-    //    bhq_printf("Verify: FRAME_END error !! \r\n");
         return 0x03;
     }
-//    bhq_printf("Verify: data success !! \r\n");
     return 0;
 }
-
-
 
 // calculate CRCCRC-16/MODBUS
 uint16_t bhkSumCrc(uint8_t *data, uint16_t length) {

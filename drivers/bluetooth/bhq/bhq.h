@@ -15,44 +15,19 @@
  */
 
 #pragma once
-
 #include "stdint.h"
 #include <stdbool.h>
 #include "debug.h"
 
-#include "km_printf.h"
-#define bhq_printf(format, ...) km_printf(format, ##__VA_ARGS__)
+#define bhq_printf(format, ...) 
 
-typedef struct bhkDevConfigInfo_t
-{
-    uint8_t  vendor_id_source; /* 0: From Bluetooth SIG, 1: From USB-IF */
-    uint16_t verndor_id;       /* No effect, the vendor ID is 0x3434 */
-    uint16_t product_id;
-
-    uint16_t le_connection_interval_min;        // Minimum Connection interval Connection interval (unit: 1.25ms)
-    uint16_t le_connection_interval_max;        // Maximum Connection interval Connection interval (unit: 1.25ms)
-    uint16_t le_connection_interval_timeout;    // Connection interval timeout
-    uint8_t  tx_poweer;                         // tx power
-
-    uint8_t     mk_is_read_battery_voltage;     // Whether the battery voltage is read by the module.
-    uint8_t     mk_adc_pga;                     // ADC pag
-    uint16_t    mk_rvd_r1;                      // resistive voltage divider  
-    uint16_t    mk_rvd_r2;
-
-    uint16_t sleep_1_s;                         // light sleep (unit: 1s)
-    uint16_t sleep_2_s;                         // deep  sleep (unit: 1s)
-
-    uint8_t bleNameStrLength;                   // ble name max length: 31
-    uint8_t bleNameStr[32];
-} bhkDevConfigInfo_t;
 enum { 
     BHQ_ACK_RUN_STA_CMDID = 0x93,
     BHQ_ACK_LED_LOCK_CMDID = 0x26
 };
 
-
-#define PACKECT_HEADER_LEN 4
-#define PACKET_MAX_LEN 256
+#define PACKECT_HEADER_LEN  4
+#define PACKET_MAX_LEN      256
 
 // -------------------- bhq protocol Small terminal mode --------------------
 
@@ -76,10 +51,10 @@ enum {
 #define BHQ_GET_BLE_PAIRING_STA(var) (((var) >> 3) & 0x01)  // 0x13->0x93:bat[1]->bit3:     ble Pairing state
 
 #define BHQ_SUCCESS     0
-
-
 // -------------------- bhq protocol Small terminal mode --------------------
-#define BHQ_RUN_OR_INT_LEVEL       1             // Module operating status and qmk have the level status of data transmission       
+
+// Module operating status and qmk have the level status of data transmission       
+#define BHQ_RUN_OR_INT_LEVEL       1             
 #ifndef BHQ_IQR_PIN
 #    error "BHQ_IQR_PIN is not defined"
 #endif
@@ -91,19 +66,14 @@ enum {
 void bhq_init(void);
 void bhq_Disable(void);
 bool bhq_available(void);
-
-void BHQ_SendCmd(uint8_t isack, uint8_t *dat, uint8_t datLength);
-void bhq_ConfigRunParam(bhkDevConfigInfo_t parma);
-
 void BHQ_Protocol_Process_user(uint8_t *dat, uint16_t length) ;
-
+void BHQ_SendCmd(uint8_t isack, uint8_t *dat, uint8_t datLength);
 
 void bhq_SetPairingMode(uint8_t host_index, uint16_t timeout_1S);
 void bhq_OpenBleAdvertising(uint8_t host_index, uint16_t timeout_1S);
 void bhq_AnewOpenBleAdvertising(uint8_t host_index, uint16_t timeout_1S);
 void bhq_CloseBleAdvertising(void);
 void bhq_switch_rf_easy_kb(void);
-
 void bhq_update_battery_percent(uint8_t percent, uint16_t bat_mv);
 
 
