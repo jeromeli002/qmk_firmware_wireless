@@ -218,8 +218,12 @@ void lpm_device_power_open(void)
     // ws2812电源开启
     ws2812_init();
     ws2812_set_power(1);
-
+    rgblight_disable();
+    rgblight_layers = _rgb_layers;  // 层灯光赋值
+    rgb_adv_unblink_all_layer();
+    rgblight_setrgb_at(0, 0, 0, 0);
 }
+
 //关闭外围设备电源
 void lpm_device_power_close(void) 
 {
