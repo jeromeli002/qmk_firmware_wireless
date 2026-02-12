@@ -91,13 +91,12 @@ void My_PWR_EnterSTOPMode(void)
     palSetLineMode(LPM_STM32_HSE_PIN_OUT, PAL_MODE_INPUT_ANALOG); 
 #endif
 
-    /* STM32F1 Wake source: Reset pin, all I/Os, BOR, RTC, IWDG, USARTx */
+    RCC->APB1ENR |= RCC_APB1ENR_PWREN;
+    PWR->CR &= ~PWR_CR_PDDS; 
+    PWR->CR |= PWR_CR_LPDS;
     SCB->SCR |= SCB_SCR_SLEEPDEEP_Msk;
-
-    PWR->CR |= PWR_CR_LPDS; 
-    PWR->CR |= PWR_CR_CWUF;  
-
-    __WFI(); 
+    
+    __WFI();
 
     SCB->SCR &= ~SCB_SCR_SLEEPDEEP_Msk;
 
@@ -146,7 +145,8 @@ void enter_low_power_mode_prepare(void)
         } 
         ATOMIC_BLOCK_FORCEON {
             gpio_set_pin_input_high(wakeUpRow_pins[i]);
-            palEnableLineEvent(wakeUpRow_pins[i], PAL_EVENT_MODE_RISING_EDGE);
+            palEnableLineEvent(wakeUpRow_pins[i], PAL_EVENT_MODE_FALLING_EDGE);
+
         }
     }
     for (i = 0; i < matrix_cols(); i++)
@@ -161,6 +161,7 @@ void enter_low_power_mode_prepare(void)
         }
     }
 #endif
+
 
 
     gpio_set_pin_input_low(BHQ_IQR_PIN);
@@ -178,6 +179,9 @@ void enter_low_power_mode_prepare(void)
 
     usbStop(&USBD1);
     usbDisconnectBus(&USBD1);
+    /*  USB D+/D- */
+    palSetLineMode(A11, PAL_MODE_INPUT_ANALOG);  
+    palSetLineMode(A12, PAL_MODE_INPUT_ANALOG);  
 
     bhq_Disable();
     lpm_device_power_close();    // 外围设备 电源 关闭

@@ -16,7 +16,7 @@
         "mousekey": true,
         "bluetooth": true,
         "nkro": true,
-        "rgblight": true
+        "rgb_matrix": true
     },
     "bluetooth":{
         "driver":"bhq"
@@ -28,33 +28,30 @@
     "debounce": 10,
     "matrix_pins": {
         "cols": ["C13", "C14", "B8", "B3"],
-        "rows": ["B14", "B13", "A13", "A15", "A14"]
+        "rows": ["B14", "B13", "A13", "A15", "B9"]
     },
-    "rgblight": {
-        "led_count": 17,
+    "rgb_matrix": {
         "animations": {
             "breathing": true,
-            "rainbow_mood": true,
-            "rainbow_swirl": true,
-            "snake": true,
-            "knight": true,
-            "christmas": true,
-            "static_gradient": true,
-            "rgb_test": true,
-            "alternating": true,
-            "twinkle": true
+            "cycle_all": true,
+            "cycle_left_right": true,
+            "cycle_up_down": true,
+            "gradient_left_right": true,
+            "gradient_up_down": true,
+            "rainbow_pinwheels": true,
+            "typing_heatmap": true,
+            "solid_reactive": true,
+            "solid_reactive_wide": true,
+            "splash": true
         },
-        "default": {
-            "animation": "rainbow_mood"
-        },
-        "layers": {
-            "enabled": true,
-            "override_rgb": true
-        }
+        // 150max
+        "driver": "ws2812",
+        "max_brightness": 150,
+        "sleep": true,
+        "led_count": 17
     },
     "ws2812": {
         "pin": "A9"
-        // "driver": "pwm"
     },
     "diode_direction": "ROW2COL",
     "layouts": {

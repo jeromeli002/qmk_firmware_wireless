@@ -14,10 +14,9 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "km_analog.h"
+#include "analog.h"
 #include <ch.h>
 #include <hal.h>
-#include "util.h"
 
 #if !HAL_USE_ADC
 #    error "You need to set HAL_USE_ADC to TRUE in your halconf.h to use the ADC."
@@ -106,7 +105,7 @@
 #define ADC_TOTAL_CHANNELS (ADC_DUMMY_CONVERSIONS_AT_START + ADC_NUM_CHANNELS)
 
 #ifndef ADC_BUFFER_DEPTH
-#    define ADC_BUFFER_DEPTH 8
+#    define ADC_BUFFER_DEPTH 1
 #endif
 
 // For more sampling rate options, look at hal_adc_lld.h in ChibiOS
@@ -132,7 +131,7 @@
 #endif
 
 static ADCConfig   adcCfg = {};
-static adcsample_t sampleBuffer[ADC_BUFFER_DEPTH + 8];
+static adcsample_t sampleBuffer[ADC_TOTAL_CHANNELS * ADC_BUFFER_DEPTH];
 
 // Initialize to max number of ADCs, set to empty object to initialize all to false.
 static bool adcInitialized[ADC_COUNT] = {};
@@ -146,7 +145,7 @@ static ADCConversionGroup adcConversionGroup = {
     .smpr  = ADC_SAMPLING_RATE,
 #elif defined(USE_ADCV2)
 #    if !defined(STM32F1XX) && !defined(GD32VF103) && !defined(WB32F3G71xx) && !defined(WB32FQ95xx) && !defined(AT32F415)
-    .cr2  = ADC_CR2_SWSTART, // F103 seem very unhappy with, F401 seems very unhappy without...
+    .cr2 = ADC_CR2_SWSTART, // F103 seem very unhappy with, F401 seems very unhappy without...
 #    endif
 #    if defined(AT32F415)
     .spt2 = ADC_SPT2_CSPT_AN0(ADC_SAMPLING_RATE) | ADC_SPT2_CSPT_AN1(ADC_SAMPLING_RATE) | ADC_SPT2_CSPT_AN2(ADC_SAMPLING_RATE) | ADC_SPT2_CSPT_AN3(ADC_SAMPLING_RATE) | ADC_SPT2_CSPT_AN4(ADC_SAMPLING_RATE) | ADC_SPT2_CSPT_AN5(ADC_SAMPLING_RATE) | ADC_SPT2_CSPT_AN6(ADC_SAMPLING_RATE) | ADC_SPT2_CSPT_AN7(ADC_SAMPLING_RATE) | ADC_SPT2_CSPT_AN8(ADC_SAMPLING_RATE) | ADC_SPT2_CSPT_AN9(ADC_SAMPLING_RATE),
@@ -416,13 +415,6 @@ int16_t analogReadPin(pin_t pin) {
     return adc_read(pinToMux(pin));
 }
 
-int16_t km_analogReadPin(pin_t pin) {
-    return analogReadPin(pin);
-}
-void km_analogAdcStop(pin_t pin) {
-    analogAdcStop(pin);
-}
-
 int16_t analogReadPinAdc(pin_t pin, uint8_t adc) {
     palSetLineMode(pin, PAL_MODE_INPUT_ANALOG);
 
@@ -457,25 +449,16 @@ int16_t adc_read(adc_mux mux) {
     }
 
     manageAdcInitializationDriver(mux.adc, targetDriver);
-    if (adcConvert(targetDriver, &adcConversionGroup, sampleBuffer, ADC_BUFFER_DEPTH) != MSG_OK) {
+    if (adcConvert(targetDriver, &adcConversionGroup, &sampleBuffer[0], ADC_BUFFER_DEPTH) != MSG_OK) {
         // analogAdcStop(mux);
         return 0;
     }
-    uint16_t sum_adc = 0;
-    uint16_t mx_ad = 0;
-    uint16_t mi_ad = 9999;
-    for (uint8_t i = 0; i < ADC_BUFFER_DEPTH; i++) {
-        sum_adc += sampleBuffer[i];
-        mx_ad = MAX(mx_ad, sampleBuffer[i]);
-        mi_ad = MIN(mi_ad, sampleBuffer[i]);
-    }
-    uint16_t avg_adc = 0;
-    if (ADC_BUFFER_DEPTH > 2) {
-        avg_adc = (sum_adc - mx_ad - mi_ad) / (ADC_BUFFER_DEPTH - 2);
-    } else {
-        avg_adc = sum_adc / ADC_BUFFER_DEPTH;
-    }
-
-    return avg_adc;
-
+    // analogAdcStop(mux);
+#if defined(USE_ADCV2) || defined(RP2040)
+    // fake 12-bit -> N-bit scale
+    return (sampleBuffer[ADC_DUMMY_CONVERSIONS_AT_START]) >> (12 - ADC_RESOLUTION);
+#else
+    // already handled as part of adcConvert
+    return sampleBuffer[ADC_DUMMY_CONVERSIONS_AT_START];
+#endif
 }

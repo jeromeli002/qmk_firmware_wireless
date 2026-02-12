@@ -47,8 +47,7 @@
 // 0 = 低电平打开电源  高电平关闭电源
 // 1 = 高电平打开电源  低电平关闭电源
 #define WS2812_POWER_PIN        B10
-#define WS2812_POWER_ON_LEVEL   0     
+#define WS2812_POWER_ON_LEVEL   1     
 
 #define WS2812_BYTE_ORDER   WS2812_BYTE_ORDER_GRB
-#define RGBLIGHT_LIMIT_VAL 180
 #define RGBLIGHT_LAYER_BLINK

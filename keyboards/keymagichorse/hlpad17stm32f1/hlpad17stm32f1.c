@@ -32,12 +32,7 @@
 #include "hal.h"
 void board_init(void) 
 {
-    // 使能 AFIO 时钟
-    RCC->APB2ENR |= RCC_APB2ENR_AFIOEN;
-
-    // 关闭 JTAG + SWD，释放 PA13 / PA14
-    AFIO->MAPR &= ~(0x7 << 24);
-    AFIO->MAPR |=  (0x4 << 24);   // 0b100: Disable JTAG-DP and SW-DP
+    AFIO->MAPR = (AFIO->MAPR & ~AFIO_MAPR_SWJ_CFG_Msk) | AFIO_MAPR_SWJ_CFG_DISABLE;
 #if defined(BLUETOOTH_BHQ)
     bhq_common_init();
 #   if defined(KB_LPM_ENABLED)
@@ -55,3 +50,48 @@ void housekeeping_task_kb(void) {
 #endif
 }
 
+led_config_t g_led_config = {
+
+    // Key Matrix to LED Index
+    {
+        {  0,  1,  2,  3 },
+        {  7,  6,  5,  4 },
+        {  8,  9, 10, NO_LED },
+        { 14, 13, 12, 11 },
+        { 15, 15, 16, NO_LED }
+    },
+
+    // LED Physical Position (x, y)
+    {
+        {  0,  0 },  // 0  Num Lock
+        { 16,  0 },  // 1  /
+        { 32,  0 },  // 2  *
+        { 48,  0 },  // 3  -
+
+        { 48, 16 },  // 4  +
+        { 32, 16 },  // 5  9
+        { 16, 16 },  // 6  8
+        {  0, 16 },  // 7  7
+
+        {  0, 32 },  // 8  4
+        { 16, 32 },  // 9  5
+        { 32, 32 },  // 10 6
+
+        { 48, 48 },  // 11 Enter
+        { 32, 48 },  // 12 3
+        { 16, 48 },  // 13 2
+        {  0, 48 },  // 14 1
+
+        {  0, 64 },  // 15 0
+        { 32, 64 },  // 16 .
+    },
+
+    // LED Flags
+    {
+        1,1,1,1,
+        1,1,1,1,
+        1,1,1,
+        1,1,1,1,
+        1,1
+    }
+};

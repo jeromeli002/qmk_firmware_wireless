@@ -15,19 +15,32 @@
  */
 #include QMK_KEYBOARD_H
 #include "config.h"
-
-#if defined(RGBLIGHT_WS2812)
-#    include "ws2812.h"
-#endif
-
+#include "ws2812.h"
+#include "color.h"
 #include "bhq_common.h"
 #include "wireless.h"
-#include "transport.h"
-#include "report_buffer.h"
-#include "timer.h"
 
-led_t kb_led_state = {0};
-uint8_t bat_low_flag = 0;
+#if defined (RGB_MATRIX_CUSTOM_BATTERY_EFFECT)
+#   include "rgb_matrix_battery_effect.h"
+#endif
+
+# if defined(RGB_MATRIX_CUSTOM_BLINK_EFFECT)
+#   include "rgb_matrix_blink_effect.h"
+#endif
+
+# if defined(KB_CHECK_BATTERY_ENABLED)
+#   include "battery.h"
+#endif
+
+// 临时变量，用于临时存放矩阵灯是否开启
+uint8_t is_sleep = 0;
+uint8_t rgb_matrix_is_enabled_temp_v = 0;
+
+#define RGB_BAT      QK_USER_1       
+
+// 延时点亮 RGB 的标志位
+static uint8_t rgb_matrix_delay_open_flag = 0;
+static uint32_t rgb_matrix_delay_open_timer = 0;
 
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 	[0] = LAYOUT(
@@ -40,8 +53,8 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     
 	[1] = LAYOUT(
 		KC_A,    KC_TRNS, KC_TRNS,  KC_TRNS,
-		KC_TRNS, KC_TRNS, KC_TRNS,  KC_TRNS,
-		KC_TRNS, KC_TRNS, KC_TRNS,
+		BLE_SW1, BLE_SW2, BLE_SW3,  RF_TOG,
+		USB_TOG, NK_TOGG, KC_TRNS,
 		KC_TRNS, KC_TRNS, QK_BOOT, 
 		KC_TRNS, KC_TRNS,           KC_TRNS
 	),
@@ -62,86 +75,30 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 		KC_TRNS, KC_TRNS,           KC_TRNS
 	),
 };
+
+
+
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
+    if(keycode == RGB_BAT)
+    {
+#if defined (RGB_MATRIX_CUSTOM_BATTERY_EFFECT)
+        if(record->event.pressed)
+        {
+            rgb_matrix_battery_effect_enabled();
+        }
+        else
+        {
+            rgb_matrix_battery_effect_disabled();
+        }
+#endif
+    }
     return process_record_bhq(keycode, record);
 }
 
-bool via_command_kb(uint8_t *data, uint8_t length) {
+__attribute__((weak)) bool via_command_kb(uint8_t *data, uint8_t length) {
     return via_command_bhq(data, length);
 }
 
-//  每个通道的颜色 以及大写按键的颜色
-const rgblight_segment_t PROGMEM bt_conn1[]   = RGBLIGHT_LAYER_SEGMENTS( {0, 1, HSV_BLUE} );        // 通道1：蓝色
-const rgblight_segment_t PROGMEM bt_conn2[]   = RGBLIGHT_LAYER_SEGMENTS( {0, 1, HSV_TURQUOISE} );   // 通道2：蓝绿色（青绿）
-const rgblight_segment_t PROGMEM bt_conn3[]   = RGBLIGHT_LAYER_SEGMENTS( {0, 1, HSV_ORANGE} );      // 通道3：橙色
-const rgblight_segment_t PROGMEM num_lock_led[] = RGBLIGHT_LAYER_SEGMENTS( {0, 1, HSV_PURPLE} );    // 数字锁：紫色
-const rgblight_segment_t PROGMEM bat_low_led[] = RGBLIGHT_LAYER_SEGMENTS( {0, 1, HSV_RED} );        // 低电量：红色
-const rgblight_segment_t PROGMEM rf24g_led[] = RGBLIGHT_LAYER_SEGMENTS( {0, 1, HSV_YELLOW} );       // 24g：黄色
-
-const rgblight_segment_t* const PROGMEM _rgb_layers[] = RGBLIGHT_LAYERS_LIST( 
-    bt_conn1, bt_conn2, bt_conn3, num_lock_led, bat_low_led, rf24g_led
-);
-
-void rgb_adv_unblink_all_layer(void) {
-    for (uint8_t i = 0; i < 5; i++) {
-        rgblight_unblink_layer(i);
-    }
-}
-
-
-
-bool led_update_user(led_t led_state) {
-    kb_led_state = led_state;
-    return true;
-}
-
-
-// 无线蓝牙回调函数
-void wireless_ble_hanlde_kb(uint8_t host_index,uint8_t advertSta,uint8_t connectSta,uint8_t pairingSta)
-{
-    rgblight_disable();
-    rgb_adv_unblink_all_layer();
-    // 蓝牙没有连接 && 蓝牙广播开启  && 蓝牙配对模式
-    if(connectSta != 1 && advertSta == 1 && pairingSta == 1)
-    {
-        // 这里第一个参数使用host_index正好对应_rgb_layers的索引
-        rgblight_blink_layer_repeat(host_index , 500, 50);
-    }
-    // 蓝牙没有连接 && 蓝牙广播开启  && 蓝牙非配对模式
-    else if(connectSta != 1 && advertSta == 1 && pairingSta == 0)
-    {
-        rgblight_blink_layer_repeat(host_index , 2000, 50);
-    }
-    // 蓝牙已连接
-    if(connectSta == 1)
-    {
-        rgblight_blink_layer_repeat(host_index , 200, 2);
-    }
-}
-// 24g回调函数
-void wireless_rf24g_hanlde_kb(uint8_t connectSta,uint8_t pairingSta)
-{
-    rgblight_disable_noeeprom();
-    rgb_adv_unblink_all_layer();
-    if(connectSta == 1)
-    {
-        rgblight_blink_layer_repeat(5 , 200, 2);
-    }
-}
-
-// 电量回调函数 红灯 慢闪
-void battery_percent_changed_kb(uint8_t level)
-{
-    if(level <= 10)
-    {
-        rgb_adv_unblink_all_layer();
-        bat_low_flag = 1;
-    }
-    else
-    {
-        bat_low_flag = 0;
-    }
-}
 
 // 2812 电源开关
 void ws2812_set_power(uint8_t on)
@@ -165,67 +122,59 @@ void ws2812_set_power(uint8_t on)
     }
 }
 
+
 // After initializing the peripheral
 void keyboard_post_init_kb(void)
 {
-    ws2812_init();
-    ws2812_set_power(1);
-
-    rgblight_disable();
-    rgblight_layers = _rgb_layers;  // 层灯光赋值
-    rgb_adv_unblink_all_layer();
-}
-
-void housekeeping_task_user(void) 
-{
-    static uint32_t kb_led_cut = 0;
-    static uint32_t low_led_blink_timer = 0;
-    static uint8_t low_led_sta = 0;
-
     
-    if (bat_low_flag == 1)
-    {
-        if (timer_elapsed32(low_led_blink_timer) > 500)
-        {
-            low_led_blink_timer = timer_read32();
-            low_led_sta ^= 1;
-            rgblight_set_layer_state(4, low_led_sta);
-        }
-        return;
-    }
-    else
-    {
-        low_led_blink_timer = 0;
-        low_led_sta = 0;
-    }
+# if defined(RGB_MATRIX_CUSTOM_BLINK_EFFECT)
+    rgb_matrix_blink_effect_init();
+#endif
 
-    // 如果当前是USB连接，或者是蓝牙/2.4G连接且已配对连接状态
-    if( (transport_get() > KB_TRANSPORT_USB && wireless_get() == WT_STATE_CONNECTED) || ( usb_power_connected() == true && transport_get() == KB_TRANSPORT_USB))
-    {
-        if (timer_elapsed32(kb_led_cut) > 500) {
-            kb_led_cut = timer_read32();
-            rgb_adv_unblink_all_layer();
-            rgblight_set_layer_state(3, kb_led_state.num_lock);
-        }
-    }
+#if defined (RGB_MATRIX_CUSTOM_BATTERY_EFFECT)
+    rgb_matrix_battery_effect_init();
+#endif
+
+    rgb_matrix_delay_open_flag = 1;
+    ws2812_set_power(1);
+    rgb_matrix_is_enabled_temp_v = rgb_matrix_is_enabled();
+    // rgb_matrix_mode_noeeprom(RGB_MATRIX_SOLID_REACTIVE_WIDE);// rgb_matrix_mode_noeeprom(RGB_MATRIX_MULTISPLASH);    // 这两个测试xy用，挺好 // rgb_matrix_mode_noeeprom(RGB_MATRIX_CYCLE_SPIRAL);
 }
 
-
-#   if defined(KB_LPM_ENABLED)
 // 低功耗外围设备电源控制
 void lpm_device_power_open(void) 
 {
-    // ws2812电源开启
-    ws2812_init();
+    rgb_matrix_delay_open_flag = 1;
     ws2812_set_power(1);
-
+    if(is_sleep == 1)
+    {
+        is_sleep = 0;
+        ws2812_init();
+        if(rgb_matrix_is_enabled_temp_v)
+        {
+            rgb_matrix_enable();    // 重新打开rgb矩阵灯
+        }
+        rgb_matrix_set_suspend_state(false);
+    }
 }
+
 //关闭外围设备电源
 void lpm_device_power_close(void) 
 {
+    is_sleep = 1;
+    // 低功耗前 获取矩阵灯的状态
+    rgb_matrix_is_enabled_temp_v = rgb_matrix_is_enabled();
+    // 软关灯
+    if(rgb_matrix_is_enabled_temp_v == 0)
+    {
+        // 软关灯，且不写入eeprom
+        rgb_matrix_disable_noeeprom();  
+    }
+    rgb_matrix_set_suspend_state(true);
+    // 关闭电源
     // ws2812电源关闭
-    rgblight_setrgb_at(0, 0, 0, 0);
     ws2812_set_power(0);
+
     gpio_set_pin_output(WS2812_DI_PIN);        // ws2812 DI Pin
     gpio_write_pin_low(WS2812_DI_PIN);
 }
@@ -233,49 +182,130 @@ void lpm_device_power_close(void)
 
 
 
+//  每个通道的颜色 以及大写按键的颜色
+// HSV_BLUE        // 蓝牙 蓝色
+// HSV_PURPLE      // 大小写：紫色
+// HSV_RED         // 低电量：红色
+
+void rgb_matrix_all_black(void)
+{
+    for (size_t i = 0; i < RGB_MATRIX_LED_COUNT; i++)
+    {
+        rgb_matrix_set_color(i, RGB_BLACK);
+    }
+}
+// 矩阵灯任务
+bool rgb_matrix_indicators_advanced_user(uint8_t led_min, uint8_t led_max) {
+    // todo：搞了两坨是干啥，晚上优化掉试试
+    if (rgb_matrix_delay_open_flag == 1) {
+        rgb_matrix_delay_open_flag = 2;
+        rgb_matrix_delay_open_timer = timer_read32();
+        rgb_matrix_all_black();
+        return false;
+    }
+    if (rgb_matrix_delay_open_flag == 2) {
+        rgb_matrix_all_black();
+        if (timer_elapsed32(rgb_matrix_delay_open_timer) > 500) { // 延时 500ms
+            rgb_matrix_delay_open_flag = 0;
+        }
+        return false;
+    }
+
+    // 如果当前是USB连接，或者是蓝牙/2.4G连接且已配对连接状态
+    if( (transport_get() > KB_TRANSPORT_USB && wireless_get() == WT_STATE_CONNECTED) || ( usb_power_connected() == true && transport_get() == KB_TRANSPORT_USB))
+    {
+        // 两个大写灯
+        if (host_keyboard_led_state().caps_lock) {
+            // 两个大写灯
+            rgb_matrix_set_color(0, RGB_PURPLE); 
+            // Q17 W18 E19 R20
+        }
+    }  
+    // usb模式时，没有枚举成功，就强行灭灯
+    if(transport_get() == KB_TRANSPORT_USB)
+    {
+        if(USBD1.state != USB_ACTIVE)
+        {
+            rgb_matrix_all_black();
+        }
+    }
+    // 无线模式时，没有连接成功，就强行灭灯
+    if(transport_get() > KB_TRANSPORT_USB)
+    {
+        if(wireless_get() != WT_STATE_CONNECTED)
+        {
+            rgb_matrix_all_black();
+        }
+    }
+
+// ************** 闪烁rgb灯逻辑 **************
+# if defined(RGB_MATRIX_CUSTOM_BLINK_EFFECT)
+    rgb_matrix_blink_effect_hook(led_min, led_max);
+#endif
+// ************** 闪烁rgb灯逻辑 **************
+
+// ************** 显示电量灯条 逻辑 **************
+#if defined (RGB_MATRIX_CUSTOM_BATTERY_EFFECT)
+    rgb_matrix_battery_effect_hook(led_min, led_max);
+#endif
+// ************** 显示电量灯条 逻辑 **************
+    return false;
+}
+
+// 无线蓝牙回调函数
+void wireless_ble_hanlde_kb(uint8_t host_index,uint8_t advertSta,uint8_t connectSta,uint8_t pairingSta)
+{
+# if defined(RGB_MATRIX_CUSTOM_BLINK_EFFECT)
+    rgb_matrix_all_unblink();
+    // 蓝牙没有连接 && 蓝牙广播开启  && 蓝牙配对模式
+    if(connectSta != 1 && advertSta == 1 && pairingSta == 1)
+    {
+        // 这里第一个参数使用host_index正好对应_rgb_layers的索引
+        rgb_matrix_blink(0, RGB_BLUE, 0, 100, 100);
+    }
+    // 蓝牙没有连接 && 蓝牙广播开启  && 蓝牙非配对模式
+    else if(connectSta != 1 && advertSta == 1 && pairingSta == 0)
+    {
+        rgb_matrix_blink(0, RGB_BLUE, 0, 200, 300);
+    }
+    else if(connectSta != 1 && advertSta == 0 && pairingSta == 0)
+    {
+        rgb_matrix_all_unblink();
+    }
+    // 蓝牙已连接
+    if(connectSta == 1)
+    {
+        rgb_matrix_blink(0, RGB_BLUE, 5, 50, 50);
+    }
+#endif
+}
+// 24g函数回调
+void wireless_rf24g_hanlde_kb(uint8_t connectSta,uint8_t pairingSta)
+{
+# if defined(RGB_MATRIX_CUSTOM_BLINK_EFFECT)
+    if(connectSta == 1)
+    {
+        rgb_matrix_blink(0, RGB_BLUE, 5, 50, 50);
+    }
+#endif
+}
+
+// 电量回调函数 红灯 慢闪
+void battery_percent_changed_kb(uint8_t level)
+{
+# if defined(RGB_MATRIX_CUSTOM_BLINK_EFFECT)
+    rgb_matrix_all_unblink();
+    if(level <= 10)
+    {
+        rgb_matrix_all_unblink();
+        rgb_matrix_blink(0, RGB_RED, 255, 500, 500);
+    }
+#endif
+}
+
 // 将未使用的引脚设置为输入模拟 
 // PS：在6095中，如果不加以下代码休眠时是102ua。如果加了就是30ua~32ua浮动
 void lpm_set_unused_pins_to_input_analog(void)
 {
-    // // 禁用调试功能以降低功耗
-    // DBGMCU->CR &= ~DBGMCU_CR_DBG_SLEEP;   // 禁用在Sleep模式下的调试
-    // DBGMCU->CR &= ~DBGMCU_CR_DBG_STOP;    // 禁用在Stop模式下的调试
-    // DBGMCU->CR &= ~DBGMCU_CR_DBG_STANDBY; // 禁用在Standby模式下的调试
-    // // 在系统初始化代码中禁用SWD接口
-    // palSetLineMode(A13, PAL_MODE_INPUT_ANALOG);
-    // palSetLineMode(A14, PAL_MODE_INPUT_ANALOG);
 
-    // palSetLineMode(A0, PAL_MODE_INPUT_ANALOG); 
-    // palSetLineMode(A1, PAL_MODE_INPUT_ANALOG); 
-    // palSetLineMode(A2, PAL_MODE_INPUT_ANALOG); 
-    // palSetLineMode(A3, PAL_MODE_INPUT_ANALOG); 
-    // palSetLineMode(A4, PAL_MODE_INPUT_ANALOG); 
-    // palSetLineMode(A5, PAL_MODE_INPUT_ANALOG); 
-    // palSetLineMode(A6, PAL_MODE_INPUT_ANALOG); 
-    // palSetLineMode(A7, PAL_MODE_INPUT_ANALOG); 
-    // palSetLineMode(A8, PAL_MODE_INPUT_ANALOG); 
-    // palSetLineMode(A9, PAL_MODE_INPUT_ANALOG); 
-    // // palSetLineMode(A10, PAL_MODE_INPUT_ANALOG); 
-    // palSetLineMode(A11, PAL_MODE_INPUT_ANALOG); 
-    // palSetLineMode(A13, PAL_MODE_INPUT_ANALOG); 
-    // palSetLineMode(A14, PAL_MODE_INPUT_ANALOG); 
-    // palSetLineMode(A15, PAL_MODE_INPUT_ANALOG); 
-
-    // palSetLineMode(B0, PAL_MODE_INPUT_ANALOG); 
-    // palSetLineMode(B1, PAL_MODE_INPUT_ANALOG); 
-    // palSetLineMode(B2, PAL_MODE_INPUT_ANALOG); 
-    // palSetLineMode(B3, PAL_MODE_INPUT_ANALOG); 
-    // palSetLineMode(B4, PAL_MODE_INPUT_ANALOG); 
-    // palSetLineMode(B5, PAL_MODE_INPUT_ANALOG); 
-    // palSetLineMode(B6, PAL_MODE_INPUT_ANALOG); 
-    // palSetLineMode(B7, PAL_MODE_INPUT_ANALOG); 
-    // palSetLineMode(B8, PAL_MODE_INPUT_ANALOG); 
-    // palSetLineMode(B9, PAL_MODE_INPUT_ANALOG); 
-    // palSetLineMode(B10, PAL_MODE_INPUT_ANALOG); 
-    // palSetLineMode(B11, PAL_MODE_INPUT_ANALOG); 
-    // palSetLineMode(B13, PAL_MODE_INPUT_ANALOG); 
-    // palSetLineMode(B14, PAL_MODE_INPUT_ANALOG); 
-    // palSetLineMode(B15, PAL_MODE_INPUT_ANALOG); 
 }
-
-#endif
