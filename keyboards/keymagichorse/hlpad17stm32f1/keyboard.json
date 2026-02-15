@@ -4,8 +4,8 @@
     "processor": "STM32F103",
     "bootloader": "stm32duino",
     "usb": {
-        "vid": "0xBB01",
-        "pid": "0xBB01",
+        "vid": "0xBB03",
+        "pid": "0xBB03",
         "device_version": "1.0.0"
     },
     "features": {

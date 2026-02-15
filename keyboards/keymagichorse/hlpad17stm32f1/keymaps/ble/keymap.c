@@ -19,12 +19,18 @@
 #include "color.h"
 #include "bhq_common.h"
 #include "wireless.h"
+#include "keymap_introspection.h"
+
+#ifdef VIA_ENABLE
+#   include "via.h"
+#endif
 
 #if defined (RGB_MATRIX_CUSTOM_BATTERY_EFFECT)
 #   include "rgb_matrix_battery_effect.h"
 #endif
 
 # if defined(RGB_MATRIX_CUSTOM_BLINK_EFFECT)
+#   include "rgb_matrix_index_by_wireless_keycode.h"
 #   include "rgb_matrix_blink_effect.h"
 #endif
 
@@ -56,7 +62,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 		BLE_SW1, BLE_SW2, BLE_SW3,  RF_TOG,
 		USB_TOG, NK_TOGG, KC_TRNS,
 		KC_TRNS, KC_TRNS, QK_BOOT, 
-		KC_TRNS, KC_TRNS,           KC_TRNS
+		RM_TOGG, RM_NEXT,           KC_TRNS
 	),
 
 	[2] = LAYOUT(
@@ -76,9 +82,8 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 	),
 };
 
-
-
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
+    
     if(keycode == RGB_BAT)
     {
 #if defined (RGB_MATRIX_CUSTOM_BATTERY_EFFECT)
@@ -92,12 +97,56 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
         }
 #endif
     }
+    // 关闭rgb矩阵灯 但 对应的指示灯还是可以亮的
+    if(keycode == QK_RGB_MATRIX_TOGGLE)
+    {
+        if (record->event.pressed) {
+            switch (rgb_matrix_get_flags()) {
+                case LED_FLAG_ALL: {
+                    rgb_matrix_set_flags(LED_FLAG_NONE);
+                    rgb_matrix_set_color_all(0, 0, 0);
+                } break;
+                default: {
+                    rgb_matrix_set_flags(LED_FLAG_ALL);
+                } break;
+            }
+        }
+        // 确保矩阵灯打开
+        if (!rgb_matrix_is_enabled()) {
+            rgb_matrix_set_flags(LED_FLAG_ALL);
+            rgb_matrix_enable();
+        }
+        return false;
+    }
     return process_record_bhq(keycode, record);
 }
 
+#ifdef VIA_ENABLE
 __attribute__((weak)) bool via_command_kb(uint8_t *data, uint8_t length) {
+    uint8_t *command_id   = &(data[0]);
+    uint8_t *command_data = &(data[1]);
+    uint16_t keycode = 0;
+    switch (*command_id) {
+        case id_dynamic_keymap_set_keycode: 
+        {
+            keycode = (command_data[3] << 8) | command_data[4];
+            if(
+                keycode == RF_TOG || 
+                keycode == USB_TOG || 
+                keycode == BLE_SW1 || 
+                keycode == BLE_SW2 || 
+                keycode == BLE_SW3
+                )
+            {
+                wireless_keycode_rgb_index_refresh();
+            }
+            break;
+        }
+    }
+
     return via_command_bhq(data, length);
 }
+#endif
 
 
 // 2812 电源开关
@@ -126,7 +175,7 @@ void ws2812_set_power(uint8_t on)
 // After initializing the peripheral
 void keyboard_post_init_kb(void)
 {
-    
+    wireless_keycode_rgb_index_init();
 # if defined(RGB_MATRIX_CUSTOM_BLINK_EFFECT)
     rgb_matrix_blink_effect_init();
 #endif
@@ -184,7 +233,7 @@ void lpm_device_power_close(void)
 
 //  每个通道的颜色 以及大写按键的颜色
 // HSV_BLUE        // 蓝牙 蓝色
-// HSV_PURPLE      // 大小写：紫色
+// RGB_PURPLE      // 大小写：紫色
 // HSV_RED         // 低电量：红色
 
 void rgb_matrix_all_black(void)
@@ -215,10 +264,17 @@ bool rgb_matrix_indicators_advanced_user(uint8_t led_min, uint8_t led_max) {
     if( (transport_get() > KB_TRANSPORT_USB && wireless_get() == WT_STATE_CONNECTED) || ( usb_power_connected() == true && transport_get() == KB_TRANSPORT_USB))
     {
         // 两个大写灯
-        if (host_keyboard_led_state().caps_lock) {
+        if (host_keyboard_led_state().num_lock) {
             // 两个大写灯
             rgb_matrix_set_color(0, RGB_PURPLE); 
             // Q17 W18 E19 R20
+        }
+        else
+        {
+            if(rgb_matrix_get_flags() == LED_FLAG_NONE)
+            {
+                rgb_matrix_set_color(0, RGB_BLACK); 
+            }
         }
     }  
     // usb模式时，没有枚举成功，就强行灭灯
@@ -261,12 +317,12 @@ void wireless_ble_hanlde_kb(uint8_t host_index,uint8_t advertSta,uint8_t connect
     if(connectSta != 1 && advertSta == 1 && pairingSta == 1)
     {
         // 这里第一个参数使用host_index正好对应_rgb_layers的索引
-        rgb_matrix_blink(0, RGB_BLUE, 0, 100, 100);
+        rgb_matrix_blink(rgb_matrix_index_by_wireless_keycode(BT_PRF1 + host_index), RGB_BLUE, 0, 100, 100);
     }
     // 蓝牙没有连接 && 蓝牙广播开启  && 蓝牙非配对模式
     else if(connectSta != 1 && advertSta == 1 && pairingSta == 0)
     {
-        rgb_matrix_blink(0, RGB_BLUE, 0, 200, 300);
+        rgb_matrix_blink(rgb_matrix_index_by_wireless_keycode(BT_PRF1 + host_index), RGB_BLUE, 0, 200, 300);
     }
     else if(connectSta != 1 && advertSta == 0 && pairingSta == 0)
     {
@@ -275,17 +331,18 @@ void wireless_ble_hanlde_kb(uint8_t host_index,uint8_t advertSta,uint8_t connect
     // 蓝牙已连接
     if(connectSta == 1)
     {
-        rgb_matrix_blink(0, RGB_BLUE, 5, 50, 50);
+        rgb_matrix_blink(rgb_matrix_index_by_wireless_keycode(BT_PRF1 + host_index), RGB_BLUE, 5, 50, 50);
     }
 #endif
 }
+
 // 24g函数回调
 void wireless_rf24g_hanlde_kb(uint8_t connectSta,uint8_t pairingSta)
 {
 # if defined(RGB_MATRIX_CUSTOM_BLINK_EFFECT)
     if(connectSta == 1)
     {
-        rgb_matrix_blink(0, RGB_BLUE, 5, 50, 50);
+        rgb_matrix_blink(rgb_matrix_index_by_wireless_keycode(OU_2P4G), RGB_BLUE, 5, 50, 50);
     }
 #endif
 }
