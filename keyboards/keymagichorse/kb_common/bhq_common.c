@@ -270,6 +270,7 @@ bool via_command_bhq(uint8_t *data, uint8_t length) {
 
 #   if defined(KB_LPM_ENABLED)
     lpm_timer_reset();  // 这里用于低功耗，刷新低功耗计时器
+    lpm_via_activity_update();
 #endif
 
     // uint8_t i = 0;

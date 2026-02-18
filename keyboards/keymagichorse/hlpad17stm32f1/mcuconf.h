@@ -30,3 +30,12 @@
 // 16mhz 配置
 // #undef  STM32_PLLXTPRE
 // #define STM32_PLLXTPRE STM32_PLLXTPRE_DIV2
+
+// ******** RTC ********
+#undef STM32_LSI_ENABLED
+#define STM32_LSI_ENABLED TRUE  
+
+#undef STM32_RTCSEL
+#define STM32_RTCSEL STM32_RTCSEL_LSI
+
+// ******** RTC ********

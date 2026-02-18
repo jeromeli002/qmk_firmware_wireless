@@ -51,6 +51,8 @@ void lpm_init(void);
 void lpm_device_power_open(void);
 void lpm_device_power_close(void);
 void lpm_set_unused_pins_to_input_analog(void);
+// via有数据更新的时候，调用一下方式MCU休眠
+void lpm_via_activity_update(void);
 
 void lpm_timer_reset(void);
 void lpm_task(void);

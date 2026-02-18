@@ -23,5 +23,10 @@
 #undef HAL_USE_ADC
 #define HAL_USE_ADC         TRUE
 
+// **************** RTC ****************
+#undef HAL_USE_RTC
+#define HAL_USE_RTC TRUE
+// **************** RTC ****************
+
 #include_next <halconf.h>
 
