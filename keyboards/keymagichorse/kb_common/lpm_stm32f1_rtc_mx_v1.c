@@ -33,6 +33,13 @@ static bool         lpm_time_up               = false;
 bool is_lpm_via_activity_flag = false;
 uint32_t lpm_via_activity_timer = 0;
 
+typedef enum{
+    RTC_LIGHT_SLEEP_MODE = 0,
+    RTC_DEEP_SLEEP_MODE
+}rtc_sleep_mode_enum;
+rtc_sleep_mode_enum ret_sleep_mode = RTC_LIGHT_SLEEP_MODE;
+uint32_t rtc_sleep_timer = 0;
+
 #if (DIODE_DIRECTION == COL2ROW)
     static const pin_t wakeUpCol_pins[MATRIX_COLS]   = MATRIX_COL_PINS;
 #elif (DIODE_DIRECTION == ROW2COL)
@@ -50,19 +57,31 @@ void lpm_timer_reset(void) {
 
 __attribute__((weak)) void lpm_device_power_open(void) ;
 __attribute__((weak)) void lpm_device_power_close(void) ;
+
 RTCDateTime timespec;
 RTCAlarm alarmspec;
-void rtc_125ms(void) {
+void rtc_wakeup_set(rtc_sleep_mode_enum mode_enmu)
+{
+    ret_sleep_mode = mode_enmu;
     // 1. 等待 RTC 寄存器同步（确保上一次操作完成）
     while (!(RTC->CRL & RTC_CRL_RTOFF)); 
 
     // 2. 进入配置模式
     RTC->CRL |= RTC_CRL_CNF;
+    switch (mode_enmu)
+    {
+        case RTC_LIGHT_SLEEP_MODE:
+            // 125ms
+            RTC->PRLH = 0;
+            RTC->PRLL = 2047; 
+            break;
 
-    // 125ms
-    RTC->PRLH = 0;
-    // RTC->PRLL = 2047; 
-    RTC->PRLL = 16376; 
+        case RTC_DEEP_SLEEP_MODE:
+            // 410ms
+            RTC->PRLH = 0;
+            RTC->PRLL = 8181; 
+            break;
+    }
 
     // 4. 退出配置模式
     RTC->CRL &= ~RTC_CRL_CNF;
@@ -70,6 +89,7 @@ void rtc_125ms(void) {
     // 5. 等待写操作完成
     while (!(RTC->CRL & RTC_CRL_RTOFF));
 }
+
 void lpm_init(void)
 {
     // 禁用调试功能以降低功耗
@@ -86,7 +106,7 @@ void lpm_init(void)
     palEnableLineEvent(USB_POWER_SENSE_PIN, PAL_EVENT_MODE_RISING_EDGE);
 
     lpm_device_power_open();
-    rtc_125ms();
+    rtc_wakeup_set(RTC_LIGHT_SLEEP_MODE);
 }
 __attribute__((weak)) void lpm_device_power_open(void) 
 {
@@ -116,6 +136,7 @@ void My_PWR_EnterSTOPMode(void)
 
     palSetLineMode(LPM_STM32_HSE_PIN_IN, PAL_MODE_INPUT_ANALOG); 
     palSetLineMode(LPM_STM32_HSE_PIN_OUT, PAL_MODE_INPUT_ANALOG); 
+
 #endif
 
     RCC->APB1ENR |= RCC_APB1ENR_PWREN;
@@ -215,6 +236,9 @@ void exit_low_power_mode_prepare(void)
     gpio_write_pin_high(BHQ_INT_PIN);
     report_keyboard_t report = {0};
     bluetooth_send_keyboard(&report);   // 往里面填充一个空的按键包
+
+    ret_sleep_mode = RTC_LIGHT_SLEEP_MODE;
+    rtc_sleep_timer = 0;
 }
 
 bool lowpower_matrix_task(void) 
@@ -317,13 +341,27 @@ void lpm_task(void)
                 else
                 {
                     temp_cut++;
-                    if(temp_cut >= 3)
+                    if(temp_cut >= 5)
                     {
                         temp_cut = 0;
+                        if(ret_sleep_mode == RTC_DEEP_SLEEP_MODE)
+                        {
+                            rtc_sleep_timer+=410;
+                        }
+                        else
+                        {
+                            rtc_sleep_timer+=125;
+                        }
+                        if(gpio_read_pin(BHQ_IQR_PIN) == 0 && rtc_sleep_timer > ((1000 * 60) * 2) )
+                        {
+                            if(ret_sleep_mode != RTC_DEEP_SLEEP_MODE)
+                            {
+                                rtc_wakeup_set(RTC_DEEP_SLEEP_MODE);
+                            }
+                        }
                         enter_low_power_mode_prepare();
                     }
                 }
-                wait_ms(1);  
             }
         } 
         else
