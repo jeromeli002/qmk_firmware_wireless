@@ -38,7 +38,6 @@ typedef enum{
     RTC_DEEP_SLEEP_MODE
 }rtc_sleep_mode_enum;
 rtc_sleep_mode_enum ret_sleep_mode = RTC_LIGHT_SLEEP_MODE;
-uint32_t rtc_sleep_timer = 0;
 
 #if (DIODE_DIRECTION == COL2ROW)
     static const pin_t wakeUpCol_pins[MATRIX_COLS]   = MATRIX_COL_PINS;
@@ -236,9 +235,6 @@ void exit_low_power_mode_prepare(void)
     gpio_write_pin_high(BHQ_INT_PIN);
     report_keyboard_t report = {0};
     bluetooth_send_keyboard(&report);   // 往里面填充一个空的按键包
-
-    ret_sleep_mode = RTC_LIGHT_SLEEP_MODE;
-    rtc_sleep_timer = 0;
 }
 
 bool lowpower_matrix_task(void) 
@@ -344,21 +340,6 @@ void lpm_task(void)
                     if(temp_cut >= 5)
                     {
                         temp_cut = 0;
-                        if(ret_sleep_mode == RTC_DEEP_SLEEP_MODE)
-                        {
-                            rtc_sleep_timer+=410;
-                        }
-                        else
-                        {
-                            rtc_sleep_timer+=125;
-                        }
-                        if(gpio_read_pin(BHQ_IQR_PIN) == 0 && rtc_sleep_timer > ((1000 * 60) * 2) )
-                        {
-                            if(ret_sleep_mode != RTC_DEEP_SLEEP_MODE)
-                            {
-                                rtc_wakeup_set(RTC_DEEP_SLEEP_MODE);
-                            }
-                        }
                         enter_low_power_mode_prepare();
                     }
                 }
