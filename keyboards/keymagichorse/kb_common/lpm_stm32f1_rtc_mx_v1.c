@@ -295,6 +295,13 @@ void lpm_task(void)
         return;
     }
     
+    if(wireless_get() == WT_STATE_ADV_UNPAIRED || wireless_get() == WT_STATE_ADV_PAIRING)
+    {
+        lpm_time_up = false;
+        lpm_timer_buffer = 0;
+        return;
+    }
+    
     if (is_lpm_via_activity_flag == true)
     {
         if(sync_timer_elapsed32(lpm_via_activity_timer) > (2000 * 60)) 
@@ -343,6 +350,7 @@ void lpm_task(void)
                         enter_low_power_mode_prepare();
                     }
                 }
+                wait_us(50);
             }
         } 
         else
