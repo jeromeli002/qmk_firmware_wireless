@@ -31,10 +31,6 @@
 #   include "battery.h"
 #endif
 
-#if SHIFT595_ENABLED
-#   include "74hc595.h"
-#endif
-
 static uint32_t     lpm_timer_buffer = 0;
 static bool         lpm_time_up               = false;
 
@@ -158,7 +154,9 @@ void enter_low_power_mode_prepare(void)
     /*  USB D+/D- */
     palSetLineMode(A11, PAL_STM32_OTYPE_PUSHPULL | PAL_STM32_OSPEED_HIGHEST | PAL_STM32_PUPDR_FLOATING | PAL_MODE_ALTERNATE(10U));
     palSetLineMode(A12, PAL_STM32_OTYPE_PUSHPULL | PAL_STM32_OSPEED_HIGHEST | PAL_STM32_PUPDR_FLOATING | PAL_MODE_ALTERNATE(10U));
- 
+    usb_event_queue_init();
+    init_usb_driver(&USBD1);
+
     // /* Call debounce_free() to avoiding memory leak of debounce_counters as debounce_init()
     // invoked in matrix_init() alloc new memory to debounce_counters */
     // debounce_free();
@@ -183,18 +181,14 @@ void enter_low_power_mode_prepare(void)
     bluetooth_send_keyboard(&report);   // 往里面填充一个空的按键包
 }
 
-
+void lpm_via_activity_update(void)
+{
+    // TODO：这里可以无需实现
+}
 
 void lpm_task(void)
 {
-    if (usb_power_connected() && USBD1.state == USB_STOP) {
-        /*  USB D+/D- */
-        palSetLineMode(A11, PAL_STM32_OTYPE_PUSHPULL | PAL_STM32_OSPEED_HIGHEST | PAL_STM32_PUPDR_FLOATING | PAL_MODE_ALTERNATE(10U));
-        palSetLineMode(A12, PAL_STM32_OTYPE_PUSHPULL | PAL_STM32_OSPEED_HIGHEST | PAL_STM32_PUPDR_FLOATING | PAL_MODE_ALTERNATE(10U));
-        usb_event_queue_init();
-        init_usb_driver(&USBD1);
-    }
-    
+
     if (usb_power_connected()) 
     {
        return;

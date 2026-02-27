@@ -1,4 +1,4 @@
-/* Copyright 2019 Drew Mills
+/* Copyright 2025 keymagichorse
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -13,34 +13,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-
 #pragma once
 
-#include <stdint.h>
-#include "gpio.h"
+#include_next <board.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-typedef struct {
-    uint16_t input;
-    uint8_t  adc;
-} adc_mux;
-#define TO_MUX(i, a) \
-    (adc_mux) {      \
-        i, a         \
-    }
-
-void analogAdcStop(pin_t pin) ; 
-int16_t analogReadPin(pin_t pin);
-int16_t analogReadPinAdc(pin_t pin, uint8_t adc);
-adc_mux pinToMux(pin_t pin);
-int16_t adc_read(adc_mux mux);
-
-void km_analogAdcStop(pin_t pin);
-int16_t km_analogReadPin(pin_t pin);
-
-#ifdef __cplusplus
-}
-#endif
+#undef STM32_HSECLK
+#define STM32_HSECLK 8000000
+// #define STM32_HSECLK 25000000

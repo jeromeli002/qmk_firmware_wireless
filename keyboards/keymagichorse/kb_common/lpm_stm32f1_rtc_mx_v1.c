@@ -25,11 +25,25 @@
 #include "report_buffer.h"
 #include "uart.h"
 #include "bhq_common.h"
+#include "bluetooth.h"
 #include "matrix_sleep.h"
 
 static uint32_t     lpm_timer_buffer = 0;
 static bool         lpm_time_up               = false;
+bool is_lpm_via_activity_flag = false;
+uint32_t lpm_via_activity_timer = 0;
 
+typedef enum{
+    RTC_LIGHT_SLEEP_MODE = 0,
+    RTC_DEEP_SLEEP_MODE
+}rtc_sleep_mode_enum;
+rtc_sleep_mode_enum ret_sleep_mode = RTC_LIGHT_SLEEP_MODE;
+
+#if (DIODE_DIRECTION == COL2ROW)
+    static const pin_t wakeUpCol_pins[MATRIX_COLS]   = MATRIX_COL_PINS;
+#elif (DIODE_DIRECTION == ROW2COL)
+    static const pin_t wakeUpRow_pins[MATRIX_ROWS] = MATRIX_ROW_PINS;
+#endif
 
 void ws2812power_enabled(void);
 void ws2812power_Disabled(void);
@@ -39,8 +53,41 @@ void lpm_timer_reset(void) {
     lpm_timer_buffer = 0;
 }
 
+
 __attribute__((weak)) void lpm_device_power_open(void) ;
 __attribute__((weak)) void lpm_device_power_close(void) ;
+
+RTCDateTime timespec;
+RTCAlarm alarmspec;
+void rtc_wakeup_set(rtc_sleep_mode_enum mode_enmu)
+{
+    ret_sleep_mode = mode_enmu;
+    // 1. 等待 RTC 寄存器同步（确保上一次操作完成）
+    while (!(RTC->CRL & RTC_CRL_RTOFF)); 
+
+    // 2. 进入配置模式
+    RTC->CRL |= RTC_CRL_CNF;
+    switch (mode_enmu)
+    {
+        case RTC_LIGHT_SLEEP_MODE:
+            // 125ms
+            RTC->PRLH = 0;
+            RTC->PRLL = 2047; 
+            break;
+
+        case RTC_DEEP_SLEEP_MODE:
+            // 410ms
+            RTC->PRLH = 0;
+            RTC->PRLL = 8181; 
+            break;
+    }
+
+    // 4. 退出配置模式
+    RTC->CRL &= ~RTC_CRL_CNF;
+
+    // 5. 等待写操作完成
+    while (!(RTC->CRL & RTC_CRL_RTOFF));
+}
 
 void lpm_init(void)
 {
@@ -58,6 +105,7 @@ void lpm_init(void)
     palEnableLineEvent(USB_POWER_SENSE_PIN, PAL_EVENT_MODE_RISING_EDGE);
 
     lpm_device_power_open();
+    rtc_wakeup_set(RTC_LIGHT_SLEEP_MODE);
 }
 __attribute__((weak)) void lpm_device_power_open(void) 
 {
@@ -87,6 +135,7 @@ void My_PWR_EnterSTOPMode(void)
 
     palSetLineMode(LPM_STM32_HSE_PIN_IN, PAL_MODE_INPUT_ANALOG); 
     palSetLineMode(LPM_STM32_HSE_PIN_OUT, PAL_MODE_INPUT_ANALOG); 
+
 #endif
 
     RCC->APB1ENR |= RCC_APB1ENR_PWREN;
@@ -107,8 +156,24 @@ void enter_low_power_mode_prepare(void)
        return;
     }
     lpm_set_unused_pins_to_input_analog();    // 设置没有使用的引脚为模拟输入
+
     matrix_sleepConfig();
 
+// rtc唤醒
+    uint32_t tv_sec;
+    /* compile ability test */
+    rtcGetTime(&RTCD1, &timespec);
+    /* set alarm in near future */
+    rtcSTM32GetSecMsec(&RTCD1, &tv_sec, NULL);
+    alarmspec.tv_sec = tv_sec + 1;
+    rtcSetAlarm(&RTCD1, 0, &alarmspec);
+
+    // 2. 打通 EXTI Line 17 (RTC Alarm -> 内核)
+    // ChibiOS 虽然有 EXTI 驱动，但直接写寄存器最稳健且不增加代码体积
+    EXTI->PR = EXTI_PR_PR17;         // 清除挂起标志
+    EXTI->IMR |= EXTI_IMR_MR17;      // 允许 EXTI 17 中断
+    EXTI->RTSR |= EXTI_RTSR_TR17;    // 必须上升沿触发
+// rtc唤醒
 
     gpio_set_pin_input_low(BHQ_IQR_PIN);
     palEnableLineEvent(BHQ_IQR_PIN, PAL_EVENT_MODE_RISING_EDGE);
@@ -127,12 +192,16 @@ void enter_low_power_mode_prepare(void)
     usbDisconnectBus(&USBD1);
     /*  USB D+/D- */
     palSetLineMode(A11, PAL_MODE_INPUT_ANALOG);  
-    palSetLineMode(A12, PAL_MODE_INPUT_ANALOG);  
+    palSetLineMode(A12, PAL_MODE_INPUT_ANALOG); 
 
     bhq_Disable();
     lpm_device_power_close();    // 外围设备 电源 关闭
     My_PWR_EnterSTOPMode();
 
+}
+
+void exit_low_power_mode_prepare(void)
+{
     chSysLock();
         stm32_clock_init();
         halInit();
@@ -154,24 +223,70 @@ void enter_low_power_mode_prepare(void)
     lpm_timer_reset();
     report_buffer_init();
     bhq_init();     // uart_init
-
-    clear_keyboard();
-    layer_clear();
+#if defined (MOUSEKEY_ENABLE)
+    mousekey_clear();
+#endif
+    // clear_keyboard();
+    // layer_clear();
+    bhq_common_init();
 
     lpm_device_power_open();    // 外围设备 电源 关闭
   
     gpio_write_pin_high(BHQ_INT_PIN);
-
+    report_keyboard_t report = {0};
+    bluetooth_send_keyboard(&report);   // 往里面填充一个空的按键包
 }
 
+bool lowpower_matrix_task(void) 
+{
+    bool any_key_pressed = false; 
+
+    uint8_t i = 0;
+#if (DIODE_DIRECTION == COL2ROW)
+    // Set row(low valid), read cols
+    for (i = 0; i < matrix_cols(); i++)
+    { // set col pull-up input
+        if(wakeUpCol_pins[i] == NO_PIN)
+        {
+            continue;
+        } 
+        if(gpio_read_pin(wakeUpCol_pins[i]) == 0 )
+        {
+            any_key_pressed = true; 
+            return any_key_pressed; 
+        }
+    }
+#elif (DIODE_DIRECTION == ROW2COL)
+    // 读取row 有一行是低电平那就唤醒
+    // Set col(low valid), read rows
+    for (i = 0; i < matrix_rows(); i++)
+    { // set row pull-up input
+        if(wakeUpRow_pins[i] == NO_PIN)
+        {
+            continue;
+        } 
+        if(gpio_read_pin(wakeUpRow_pins[i]) == 0 )
+        {
+            any_key_pressed = true; 
+            return any_key_pressed; 
+        }
+    }
+#endif
+    return any_key_pressed; 
+}
 
 void lpm_via_activity_update(void)
 {
-    // TODO：这里可以无需实现
+    lpm_via_activity_timer = sync_timer_read32();
+    is_lpm_via_activity_flag = true;
 }
 
 void lpm_task(void)
 {
+    if (usb_power_connected()) 
+    {
+       return;
+    }
 
     if(report_buffer_is_empty() == false)
     {
@@ -179,6 +294,26 @@ void lpm_task(void)
         lpm_timer_buffer = 0;
         return;
     }
+    
+    if(wireless_get() == WT_STATE_ADV_UNPAIRED || wireless_get() == WT_STATE_ADV_PAIRING)
+    {
+        lpm_time_up = false;
+        lpm_timer_buffer = 0;
+        return;
+    }
+    
+    if (is_lpm_via_activity_flag == true)
+    {
+        if(sync_timer_elapsed32(lpm_via_activity_timer) > (2000 * 60)) 
+        {
+            lpm_time_up = false;
+            lpm_timer_buffer = 0;
+            is_lpm_via_activity_flag = false;
+            return;
+        }
+        return;
+    }
+
 
     if(lpm_time_up == false && lpm_timer_buffer == 0)
     {
@@ -190,5 +325,39 @@ void lpm_task(void)
         lpm_time_up = false;
         lpm_timer_buffer = 0;
         enter_low_power_mode_prepare();
+// rtc唤醒逻辑 start 
+        uint8_t temp_cut = 0;
+        if (EXTI->PR & EXTI_PR_PR17) {
+            EXTI->PR = EXTI_PR_PR17; 
+            while(1)
+            {
+                // usb插入时,直接唤醒
+                if(usb_power_connected())
+                {
+                    exit_low_power_mode_prepare();
+                    return;
+                }
+                if(lowpower_matrix_task())
+                {
+                    break;
+                }
+                else
+                {
+                    temp_cut++;
+                    if(temp_cut >= 5)
+                    {
+                        temp_cut = 0;
+                        enter_low_power_mode_prepare();
+                    }
+                }
+                wait_us(50);
+            }
+        } 
+        else
+        {
+            exit_low_power_mode_prepare();
+        }
+// rtc唤醒逻辑 end 
+        exit_low_power_mode_prepare();
     }
 }

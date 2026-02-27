@@ -93,17 +93,17 @@ static uint8_t battery_read_percent(void)
 
     const uint8_t NUM = 10;
 
-    km_analogReadPin(BATTERY_ADC_PIN);
+    analogReadPin(BATTERY_ADC_PIN);
     wait_us(50);
 
     for (uint8_t i = 0; i < NUM; i++) {
-        uint16_t v = km_analogReadPin(BATTERY_ADC_PIN);
+        uint16_t v = analogReadPin(BATTERY_ADC_PIN);
 
         if (v < 5) {
             wait_us(10);
-            v = km_analogReadPin(BATTERY_ADC_PIN) ;
+            v = analogReadPin(BATTERY_ADC_PIN) ;
             if (v < 5) {
-                km_analogAdcStop(BATTERY_ADC_PIN);
+                analogAdcStop(BATTERY_ADC_PIN);
                 return 0;
             }
         }
@@ -113,12 +113,13 @@ static uint8_t battery_read_percent(void)
         if (v < min_v) min_v = v;
     }
 
-    km_analogAdcStop(BATTERY_ADC_PIN);
+    analogAdcStop(BATTERY_ADC_PIN);
 
     sum -= max_v + min_v;
     uint16_t adc = sum / (NUM - 2);
 
-    uint16_t mv_div = (adc * 3300UL) / 4095;    // 12bit
+    // uint16_t mv_div = (adc * 3300UL) / 4095;    // 12bit
+    uint16_t mv_div = (adc * 3300UL) / 1023;    // 10bit
     battery_mv =
         (uint16_t)((uint32_t)mv_div * (BAT_R_UPPER + BAT_R_LOWER) /
                    BAT_R_LOWER);

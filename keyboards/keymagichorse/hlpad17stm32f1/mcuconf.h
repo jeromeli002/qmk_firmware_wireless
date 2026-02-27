@@ -1,4 +1,4 @@
-/* Copyright 2019 Drew Mills
+/* Copyright 2025 keymagichorse
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,31 +16,26 @@
 
 #pragma once
 
-#include <stdint.h>
-#include "gpio.h"
+#include_next <mcuconf.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#define HAL_USE_SERIAL  TRUE        // enabled SERIAL
 
-typedef struct {
-    uint16_t input;
-    uint8_t  adc;
-} adc_mux;
-#define TO_MUX(i, a) \
-    (adc_mux) {      \
-        i, a         \
-    }
+#    undef STM32_SERIAL_USE_USART2
+#    define STM32_SERIAL_USE_USART2 TRUE
 
-void analogAdcStop(pin_t pin) ; 
-int16_t analogReadPin(pin_t pin);
-int16_t analogReadPinAdc(pin_t pin, uint8_t adc);
-adc_mux pinToMux(pin_t pin);
-int16_t adc_read(adc_mux mux);
+#undef STM32_ADC_USE_ADC1
+#define STM32_ADC_USE_ADC1          TRUE
 
-void km_analogAdcStop(pin_t pin);
-int16_t km_analogReadPin(pin_t pin);
 
-#ifdef __cplusplus
-}
-#endif
+// 16mhz 配置
+// #undef  STM32_PLLXTPRE
+// #define STM32_PLLXTPRE STM32_PLLXTPRE_DIV2
+
+// ******** RTC ********
+#undef STM32_LSI_ENABLED
+#define STM32_LSI_ENABLED TRUE  
+
+#undef STM32_RTCSEL
+#define STM32_RTCSEL STM32_RTCSEL_LSI
+
+// ******** RTC ********

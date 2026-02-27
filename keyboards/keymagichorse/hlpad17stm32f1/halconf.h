@@ -1,4 +1,4 @@
-/* Copyright 2019 Drew Mills
+/* Copyright 2024 keymagichorse
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,31 +16,17 @@
 
 #pragma once
 
-#include <stdint.h>
-#include "gpio.h"
+#define PAL_USE_CALLBACKS   TRUE
+#define HAL_USE_PAL         TRUE           
+#define PAL_USE_WAIT        TRUE  
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#undef HAL_USE_ADC
+#define HAL_USE_ADC         TRUE
 
-typedef struct {
-    uint16_t input;
-    uint8_t  adc;
-} adc_mux;
-#define TO_MUX(i, a) \
-    (adc_mux) {      \
-        i, a         \
-    }
+// **************** RTC ****************
+#undef HAL_USE_RTC
+#define HAL_USE_RTC TRUE
+// **************** RTC ****************
 
-void analogAdcStop(pin_t pin) ; 
-int16_t analogReadPin(pin_t pin);
-int16_t analogReadPinAdc(pin_t pin, uint8_t adc);
-adc_mux pinToMux(pin_t pin);
-int16_t adc_read(adc_mux mux);
+#include_next <halconf.h>
 
-void km_analogAdcStop(pin_t pin);
-int16_t km_analogReadPin(pin_t pin);
-
-#ifdef __cplusplus
-}
-#endif

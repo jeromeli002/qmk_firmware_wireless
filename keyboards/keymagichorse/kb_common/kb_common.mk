@@ -69,7 +69,7 @@ ifeq ($(strip $(BLUETOOTH_DRIVER)), bhq)
                 SRC+= kb_common/matrix/matrix_sleep/matrix_sleep_${MATRIX_TYPE}_at32.c
             endif
 
-            ifeq ($(strip $(KB_LPM_DRIVER)), lpm_stm32f4)
+            ifneq ($(filter $(KB_LPM_DRIVER), lpm_stm32f4 lpm_stm32f1_rtc_mx_v1 lpm_stm32f1),)
                 SRC+= kb_common/matrix/matrix_sleep/matrix_sleep_${MATRIX_TYPE}_stm32.c
             endif
         else
@@ -108,6 +108,11 @@ endif
     OPT_DEFS += -DRGB_MATRIX_CUSTOM_BLINK_EFFECT
     VPATH += ${KB_COMMON_DIR}/rgb_matrix_custom_effect/rgb_matrix_blink_effect
     SRC += kb_common/rgb_matrix_custom_effect/rgb_matrix_blink_effect/rgb_matrix_blink_effect.c
+    
+    # 通过keycode获取rgb index的
+    VPATH += ${KB_COMMON_DIR}/rgb_matrix_custom_effect/rgb_matrix_index_by_wireless_keycode
+    SRC += kb_common/rgb_matrix_custom_effect/rgb_matrix_index_by_wireless_keycode/rgb_matrix_index_by_wireless_keycode.c
+    
 endif
 # rgb_matrix 电量百分比显示功能
 ifeq ($(strip $(RGB_MATRIX_CUSTOM_BATTERY_EFFECT)), yes)
